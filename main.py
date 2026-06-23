@@ -14,3 +14,46 @@ from slowapi.errors import RateLimitExceeded
 DB_PATH = os.environ.get("FLASHCARD_DB", "flashcards.db")
 
 
+def get_connection() -> sqlite3.Connection:
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
+
+
+def init_db() -> None:
+    conn = get_connection()
+    try:
+        conn.executescript("""
+            CREATE TABLE IF NOT EXISTS api_keys (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                key TEXT NOT NULL UNIQUE,
+                owner TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS decks (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                owner_key TEXT NOT NULL,
+                name TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (owner_key) REFERENCES api_keys(key) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS cards (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                deck_id INTEGER NOT NULL,
+                front TEXT NOT NULL,
+                back TEXT NOT NULL,
+                due_at TEXT NOT NULL DEFAULT (datetime('now')),
+                interval_days INTEGER NOT NULL DEFAULT 0,
+                ease REAL NOT NULL DEFAULT 2.5,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (deck_id) REFERENCES decks(id) ON DELETE CASCADE
+            );
+        """)
+        conn.commit()
+    finally:
+        conn.close()
+
+
